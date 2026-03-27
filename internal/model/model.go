@@ -42,19 +42,20 @@ const (
 )
 
 type Session struct {
-	SourceNamespace string
-	SessionID       string
-	Cwd             string
-	CwdLabel        string
-	Status          Status
-	StartedAt       time.Time
-	LastEventAt     time.Time
-	EndedAt         *time.Time
-	CurrentAction   string
-	Headline        string
-	HeadlineSource  HeadlineSource
-	SessionTitle    string
-	ShortID         string
+	SourceNamespace    string
+	SessionID          string
+	Cwd                string
+	CwdLabel           string
+	Status             Status
+	StartedAt          time.Time
+	LastEventAt        time.Time
+	EndedAt            *time.Time
+	CurrentAction      string
+	Headline           string
+	HeadlineSource     HeadlineSource
+	SessionTitle       string
+	ShortID            string
+	GhosttyTerminalID  string
 }
 
 type Event struct {
@@ -69,18 +70,19 @@ type Event struct {
 }
 
 type SessionCardVM struct {
-	SourceNamespace string
-	SessionID       string
-	Cwd             string
-	CwdLabel        string
-	Status          Status
-	ElapsedLabel    string
-	CurrentAction   string
-	Headline        string
-	HeadlineSource  HeadlineSource
-	SessionTitle    string
-	EventDots       []DotKind
-	UpdatedAt       string
+	SourceNamespace    string
+	SessionID          string
+	Cwd                string
+	CwdLabel           string
+	Status             Status
+	ElapsedLabel       string
+	CurrentAction      string
+	Headline           string
+	HeadlineSource     HeadlineSource
+	SessionTitle       string
+	EventDots          []DotKind
+	UpdatedAt          string
+	GhosttyTerminalID  string
 }
 
 func BuildCardVM(s *Session, recentEvents []Event, now time.Time) SessionCardVM {
@@ -92,18 +94,19 @@ func BuildCardVM(s *Session, recentEvents []Event, now time.Time) SessionCardVM 
 	}
 
 	return SessionCardVM{
-		SourceNamespace: s.SourceNamespace,
-		SessionID:       s.SessionID,
-		Cwd:             s.Cwd,
-		CwdLabel:        buildCwdLabel(s.Cwd),
-		Status:          status,
-		ElapsedLabel:    buildElapsedLabel(s.StartedAt, now),
-		CurrentAction:   s.CurrentAction,
-		Headline:        truncate(s.Headline, 80),
-		HeadlineSource:  s.HeadlineSource,
-		SessionTitle:    s.SessionTitle,
-		EventDots:       buildEventDots(recentEvents),
-		UpdatedAt:       s.LastEventAt.Format(time.RFC3339),
+		SourceNamespace:    s.SourceNamespace,
+		SessionID:          s.SessionID,
+		Cwd:                s.Cwd,
+		CwdLabel:           buildCwdLabel(s.Cwd),
+		Status:             status,
+		ElapsedLabel:       buildElapsedLabel(s.StartedAt, now),
+		CurrentAction:      s.CurrentAction,
+		Headline:           truncate(s.Headline, 80),
+		HeadlineSource:     s.HeadlineSource,
+		SessionTitle:       s.SessionTitle,
+		EventDots:          buildEventDots(recentEvents),
+		UpdatedAt:          s.LastEventAt.Format(time.RFC3339),
+		GhosttyTerminalID:  s.GhosttyTerminalID,
 	}
 }
 

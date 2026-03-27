@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
@@ -137,20 +138,27 @@ func Process(r io.Reader, store *db.Store, sourceNamespace string, debugDir stri
 		sessionTitle = truncStr(firstLine(payload.Prompt), 80)
 	}
 
+	// Capture Ghostty terminal ID on SessionStart
+	ghosttyTerminalID := ""
+	if payload.HookEventName == "SessionStart" {
+		ghosttyTerminalID = detectGhosttyTerminalID()
+	}
+
 	// Upsert session
 	sess := &model.Session{
-		SourceNamespace: sourceNamespace,
-		SessionID:       payload.SessionID,
-		Cwd:             cwd,
-		CwdLabel:        cwdLabel,
-		Status:          newStatus,
-		StartedAt:       now,
-		LastEventAt:     now,
-		CurrentAction:   currentAction,
-		Headline:        headline,
-		HeadlineSource:  headlineSource,
-		SessionTitle:    sessionTitle,
-		ShortID:         shortID,
+		SourceNamespace:   sourceNamespace,
+		SessionID:         payload.SessionID,
+		Cwd:               cwd,
+		CwdLabel:          cwdLabel,
+		Status:            newStatus,
+		StartedAt:         now,
+		LastEventAt:       now,
+		CurrentAction:     currentAction,
+		Headline:          headline,
+		HeadlineSource:    headlineSource,
+		SessionTitle:      sessionTitle,
+		ShortID:           shortID,
+		GhosttyTerminalID: ghosttyTerminalID,
 	}
 
 	if payload.HookEventName == "SessionEnd" {
@@ -230,4 +238,20 @@ func truncStr(s string, max int) string {
 		return string(runes[:max-1]) + "…"
 	}
 	return s
+}
+
+// detectGhosttyTerminalID uses osascript to get the focused Ghostty terminal ID.
+func detectGhosttyTerminalID() string {
+	out, err := exec.Command("osascript", "-e", `
+tell application "Ghostty"
+	set w to front window
+	set t to selected tab of w
+	set term to focused terminal of t
+	return id of term
+end tell
+`).Output()
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(out))
 }

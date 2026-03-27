@@ -24,7 +24,7 @@ var tuiCmd = &cobra.Command{
 		defer store.Close()
 
 		m := tui.NewModel(store, cfg.Source)
-		p := tea.NewProgram(m, tea.WithAltScreen())
+		p := tea.NewProgram(m, tea.WithAltScreen(), tea.WithMouseCellMotion())
 		if _, err := p.Run(); err != nil {
 			return fmt.Errorf("TUI error: %w", err)
 		}

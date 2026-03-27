@@ -78,14 +78,15 @@ func (s *Store) migrate() error {
 	// Migrations for existing DBs
 	s.db.Exec(`ALTER TABLE sessions ADD COLUMN headline_source TEXT NOT NULL DEFAULT 'none'`)
 	s.db.Exec(`ALTER TABLE sessions ADD COLUMN session_title TEXT NOT NULL DEFAULT ''`)
+	s.db.Exec(`ALTER TABLE sessions ADD COLUMN ghostty_terminal_id TEXT NOT NULL DEFAULT ''`)
 
 	return nil
 }
 
 func (s *Store) UpsertSession(sess *model.Session) error {
 	_, err := s.db.Exec(`
-		INSERT INTO sessions (source_namespace, session_id, cwd, cwd_label, status, started_at, last_event_at, ended_at, current_action, headline, headline_source, session_title, short_id)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		INSERT INTO sessions (source_namespace, session_id, cwd, cwd_label, status, started_at, last_event_at, ended_at, current_action, headline, headline_source, session_title, short_id, ghostty_terminal_id)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(source_namespace, session_id) DO UPDATE SET
 			cwd = CASE WHEN excluded.cwd != '' THEN excluded.cwd ELSE sessions.cwd END,
 			cwd_label = CASE WHEN excluded.cwd_label != '' THEN excluded.cwd_label ELSE sessions.cwd_label END,
@@ -101,12 +102,14 @@ func (s *Store) UpsertSession(sess *model.Session) error {
 				WHEN excluded.headline != '' THEN excluded.headline_source
 				WHEN excluded.status = 'running' AND sessions.headline_source = 'notification' THEN 'none'
 				ELSE sessions.headline_source END,
-			session_title = CASE WHEN sessions.session_title = '' AND excluded.session_title != '' THEN excluded.session_title ELSE sessions.session_title END
+			session_title = CASE WHEN sessions.session_title = '' AND excluded.session_title != '' THEN excluded.session_title ELSE sessions.session_title END,
+			ghostty_terminal_id = CASE WHEN excluded.ghostty_terminal_id != '' THEN excluded.ghostty_terminal_id ELSE sessions.ghostty_terminal_id END
 	`,
 		sess.SourceNamespace, sess.SessionID, sess.Cwd, sess.CwdLabel,
 		string(sess.Status), sess.StartedAt.Format(time.RFC3339),
 		sess.LastEventAt.Format(time.RFC3339), formatOptionalTime(sess.EndedAt),
 		sess.CurrentAction, sess.Headline, string(sess.HeadlineSource), sess.SessionTitle, sess.ShortID,
+		sess.GhosttyTerminalID,
 	)
 	return err
 }
@@ -125,7 +128,7 @@ func (s *Store) InsertEvent(evt *model.Event) error {
 
 func (s *Store) ListSessions() ([]model.Session, error) {
 	rows, err := s.db.Query(`
-		SELECT source_namespace, session_id, cwd, cwd_label, status, started_at, last_event_at, ended_at, current_action, headline, headline_source, session_title, short_id
+		SELECT source_namespace, session_id, cwd, cwd_label, status, started_at, last_event_at, ended_at, current_action, headline, headline_source, session_title, short_id, ghostty_terminal_id
 		FROM sessions
 		ORDER BY last_event_at DESC, session_id ASC
 	`)
@@ -144,6 +147,7 @@ func (s *Store) ListSessions() ([]model.Session, error) {
 			&sess.SourceNamespace, &sess.SessionID, &sess.Cwd, &sess.CwdLabel,
 			&status, &startedAt, &lastEventAt, &endedAt,
 			&sess.CurrentAction, &sess.Headline, &headlineSource, &sess.SessionTitle, &sess.ShortID,
+			&sess.GhosttyTerminalID,
 		)
 		if err != nil {
 			return nil, err

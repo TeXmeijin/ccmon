@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	"os/exec"
 	"strings"
 	"time"
 
@@ -88,6 +89,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.cursor = len(m.cards) - 1
 			}
 			m.ensureVisible()
+		case "enter":
+			m.focusGhosttyTerminal()
+		}
+
+	case tea.MouseMsg:
+		if msg.Action == tea.MouseActionRelease && msg.Button == tea.MouseButtonLeft {
+			if idx, ok := m.hitTestCard(msg.X, msg.Y); ok {
+				m.cursor = idx
+				m.focusGhosttyTerminal()
+			}
 		}
 
 	case tea.WindowSizeMsg:
@@ -111,9 +122,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m *Model) columns() int {
 	switch {
-	case m.width >= 140:
+	case m.width >= 240:
 		return 3
-	case m.width >= 80:
+	case m.width >= 160:
 		return 2
 	default:
 		return 1
@@ -248,7 +259,7 @@ func (m Model) View() string {
 	// Footer
 	footer := lipgloss.NewStyle().
 		Foreground(colorMuted).
-		Render(" q:quit  hjkl:move  r:reload" + scrollInfo)
+		Render(" q:quit  hjkl:move  r:reload  enter:focus" + scrollInfo)
 
 	// Combine
 	content := lipgloss.JoinVertical(lipgloss.Left, header, body, footer)
@@ -261,4 +272,92 @@ func max(a, b int) int {
 		return a
 	}
 	return b
+}
+
+// focusGhosttyTerminal activates the Ghostty pane for the currently selected card.
+func (m *Model) focusGhosttyTerminal() {
+	if m.cursor < 0 || m.cursor >= len(m.cards) {
+		return
+	}
+	termID := m.cards[m.cursor].GhosttyTerminalID
+	if termID == "" {
+		return
+	}
+
+	script := fmt.Sprintf(`
+tell application "Ghostty"
+	set targetID to %q
+	set allWindows to every window
+	repeat with wi from 1 to count of allWindows
+		set w to item wi of allWindows
+		set allTabs to every tab of w
+		repeat with ti from 1 to count of allTabs
+			set tb to item ti of allTabs
+			set termIDs to id of every terminal of tb
+			if targetID is in termIDs then
+				activate window w
+			end if
+		end repeat
+	end repeat
+end tell
+
+delay 0.2
+
+tell application "Ghostty"
+	set targetID to %q
+	set w to front window
+	set allTabs to every tab of w
+	repeat with ti from 1 to count of allTabs
+		set tb to item ti of allTabs
+		set termIDs to id of every terminal of tb
+		if targetID is in termIDs then
+			select tab tb
+			exit repeat
+		end if
+	end repeat
+end tell
+
+delay 0.2
+
+tell application "Ghostty"
+	set targetID to %q
+	repeat with t in every terminal
+		if id of t is targetID then
+			focus t
+			return "OK"
+		end if
+	end repeat
+	return "not found"
+end tell
+`, termID, termID, termID)
+
+	exec.Command("osascript", "-e", script).Start()
+}
+
+// hitTestCard determines which card index was clicked based on mouse coordinates.
+func (m *Model) hitTestCard(x, y int) (int, bool) {
+	if len(m.cards) == 0 {
+		return 0, false
+	}
+	cols := m.columns()
+	cw := m.cardWidth()
+	rowH := cardHeight + 3 // card content + border
+
+	// y=0 is the header line
+	cardY := y - 1
+	if cardY < 0 {
+		return 0, false
+	}
+
+	row := cardY/rowH + m.scrollY
+	col := x / cw
+	if col >= cols {
+		col = cols - 1
+	}
+
+	idx := row*cols + col
+	if idx < 0 || idx >= len(m.cards) {
+		return 0, false
+	}
+	return idx, true
 }
