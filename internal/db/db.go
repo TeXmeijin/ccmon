@@ -126,6 +126,15 @@ func (s *Store) InsertEvent(evt *model.Event) error {
 	return err
 }
 
+func (s *Store) ClearGhosttyTerminalID(sourceNamespace, sessionID string) error {
+	_, err := s.db.Exec(`
+		UPDATE sessions
+		SET ghostty_terminal_id = ''
+		WHERE source_namespace = ? AND session_id = ?
+	`, sourceNamespace, sessionID)
+	return err
+}
+
 func (s *Store) ListSessions() ([]model.Session, error) {
 	rows, err := s.db.Query(`
 		SELECT source_namespace, session_id, cwd, cwd_label, status, started_at, last_event_at, ended_at, current_action, headline, headline_source, session_title, short_id, ghostty_terminal_id

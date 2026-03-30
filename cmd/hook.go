@@ -3,6 +3,7 @@ package cmd
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 
 	"github.com/spf13/cobra"
 
@@ -15,9 +16,12 @@ var flagDebugDir string
 
 var hookCmd = &cobra.Command{
 	Use:   "hook",
-	Short: "Process a Claude Code hook event from stdin",
+	Short: "Process a provider hook event from stdin",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		cfg := config.Resolve(flagConfigDir, flagSource, flagDB)
+		cfg, err := config.Resolve(flagConfigDir, flagSource, flagDB, flagProvider)
+		if err != nil {
+			return err
+		}
 
 		store, err := db.Open(cfg.DBPath)
 		if err != nil {
@@ -25,7 +29,8 @@ var hookCmd = &cobra.Command{
 		}
 		defer store.Close()
 
-		return hook.Process(os.Stdin, store, cfg.Source, flagDebugDir)
+		bindingLogPath := filepath.Join(cfg.ConfigDir, "ccmon", "ghostty-binding.jsonl")
+		return hook.Process(os.Stdin, store, cfg.Source, flagDebugDir, bindingLogPath)
 	},
 }
 

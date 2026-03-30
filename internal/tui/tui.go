@@ -2,33 +2,37 @@ package tui
 
 import (
 	"fmt"
-	"os/exec"
+	"path/filepath"
 	"strings"
 	"time"
 
+	"github.com/TeXmeijin/ccmon/internal/db"
+	"github.com/TeXmeijin/ccmon/internal/ghostty"
+	"github.com/TeXmeijin/ccmon/internal/model"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/TeXmeijin/ccmon/internal/db"
-	"github.com/TeXmeijin/ccmon/internal/model"
 )
 
 type tickMsg time.Time
 
 type Model struct {
-	store    *db.Store
-	cards    []model.SessionCardVM
-	cursor   int
-	width    int
-	height   int
-	scrollY  int // scroll offset in card-rows
-	tick     int
-	source   string
+	store          *db.Store
+	cards          []model.SessionCardVM
+	cursor         int
+	width          int
+	height         int
+	scrollY        int // scroll offset in card-rows
+	tick           int
+	source         string
+	bindingLogPath string
+	lastNotice     string
 }
 
-func NewModel(store *db.Store, source string) Model {
+func NewModel(store *db.Store, source string, configDir string) Model {
 	return Model{
-		store:  store,
-		source: source,
+		store:          store,
+		source:         source,
+		bindingLogPath: filepath.Join(configDir, "ccmon", "ghostty-focus.jsonl"),
 	}
 }
 
@@ -257,9 +261,13 @@ func (m Model) View() string {
 	body := lipgloss.JoinVertical(lipgloss.Left, visibleRows...)
 
 	// Footer
+	footerText := " q:quit  hjkl:move  r:reload  enter:focus" + scrollInfo
+	if m.lastNotice != "" {
+		footerText += "  |  " + m.lastNotice
+	}
 	footer := lipgloss.NewStyle().
 		Foreground(colorMuted).
-		Render(" q:quit  hjkl:move  r:reload  enter:focus" + scrollInfo)
+		Render(footerText)
 
 	// Combine
 	content := lipgloss.JoinVertical(lipgloss.Left, header, body, footer)
@@ -281,57 +289,57 @@ func (m *Model) focusGhosttyTerminal() {
 	}
 	termID := m.cards[m.cursor].GhosttyTerminalID
 	if termID == "" {
+		m.lastNotice = "pane unbound"
+		_ = ghostty.AppendBindingLog(m.bindingLogPath, map[string]any{
+			"at":               ghostty.Timestamp(),
+			"kind":             "focus",
+			"source_namespace": m.cards[m.cursor].SourceNamespace,
+			"session_id":       m.cards[m.cursor].SessionID,
+			"cwd":              m.cards[m.cursor].Cwd,
+			"target_id":        "",
+			"result":           "unbound",
+		})
 		return
 	}
 
-	script := fmt.Sprintf(`
-tell application "Ghostty"
-	set targetID to %q
-	set allWindows to every window
-	repeat with wi from 1 to count of allWindows
-		set w to item wi of allWindows
-		set allTabs to every tab of w
-		repeat with ti from 1 to count of allTabs
-			set tb to item ti of allTabs
-			set termIDs to id of every terminal of tb
-			if targetID is in termIDs then
-				activate window w
-			end if
-		end repeat
-	end repeat
-end tell
+	result, err := ghostty.FocusTerminalByID(termID)
+	if err != nil {
+		m.lastNotice = "pane lookup failed"
+		_ = ghostty.AppendBindingLog(m.bindingLogPath, map[string]any{
+			"at":               ghostty.Timestamp(),
+			"kind":             "focus",
+			"source_namespace": m.cards[m.cursor].SourceNamespace,
+			"session_id":       m.cards[m.cursor].SessionID,
+			"cwd":              m.cards[m.cursor].Cwd,
+			"target_id":        termID,
+			"result":           string(result),
+			"error":            err.Error(),
+		})
+		return
+	}
 
-delay 0.2
+	_ = ghostty.AppendBindingLog(m.bindingLogPath, map[string]any{
+		"at":               ghostty.Timestamp(),
+		"kind":             "focus",
+		"source_namespace": m.cards[m.cursor].SourceNamespace,
+		"session_id":       m.cards[m.cursor].SessionID,
+		"cwd":              m.cards[m.cursor].Cwd,
+		"target_id":        termID,
+		"result":           string(result),
+	})
 
-tell application "Ghostty"
-	set targetID to %q
-	set w to front window
-	set allTabs to every tab of w
-	repeat with ti from 1 to count of allTabs
-		set tb to item ti of allTabs
-		set termIDs to id of every terminal of tb
-		if targetID is in termIDs then
-			select tab tb
-			exit repeat
-		end if
-	end repeat
-end tell
-
-delay 0.2
-
-tell application "Ghostty"
-	set targetID to %q
-	repeat with t in every terminal
-		if id of t is targetID then
-			focus t
-			return "OK"
-		end if
-	end repeat
-	return "not found"
-end tell
-`, termID, termID, termID)
-
-	exec.Command("osascript", "-e", script).Start()
+	switch result {
+	case ghostty.FocusResultFocused:
+		m.lastNotice = ""
+	case ghostty.FocusResultMissing:
+		m.lastNotice = "pane binding stale"
+		_ = m.store.ClearGhosttyTerminalID(m.cards[m.cursor].SourceNamespace, m.cards[m.cursor].SessionID)
+		m.cards[m.cursor].GhosttyTerminalID = ""
+	case ghostty.FocusResultAmbiguous:
+		m.lastNotice = "pane binding ambiguous"
+	default:
+		m.lastNotice = "Ghostty unavailable"
+	}
 }
 
 // hitTestCard determines which card index was clicked based on mouse coordinates.

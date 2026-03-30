@@ -5,16 +5,16 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/TeXmeijin/ccmon/internal/db"
+	"github.com/TeXmeijin/ccmon/internal/ghostty"
 	"github.com/TeXmeijin/ccmon/internal/model"
 )
 
-// HookPayload represents the JSON payload from Claude Code command hooks.
+// HookPayload represents the JSON payload from provider command hooks.
 // Fields vary by event type.
 type HookPayload struct {
 	SessionID     string `json:"session_id"`
@@ -46,7 +46,7 @@ type HookPayload struct {
 
 // Process reads a hook payload from the given reader and updates the database.
 // If debugDir is non-empty, raw payloads are appended to debugDir/payloads.jsonl.
-func Process(r io.Reader, store *db.Store, sourceNamespace string, debugDir string) error {
+func Process(r io.Reader, store *db.Store, sourceNamespace string, debugDir string, bindingLogPath string) error {
 	data, err := io.ReadAll(r)
 	if err != nil {
 		return fmt.Errorf("reading stdin: %w", err)
@@ -73,6 +73,17 @@ func Process(r io.Reader, store *db.Store, sourceNamespace string, debugDir stri
 	}
 
 	now := time.Now()
+	focusedTerminalID := ghostty.DetectFocusedTerminalID()
+	_ = ghostty.AppendBindingLog(bindingLogPath, map[string]any{
+		"at":                  ghostty.Timestamp(),
+		"kind":                "hook",
+		"source_namespace":    sourceNamespace,
+		"session_id":          payload.SessionID,
+		"hook_event_name":     payload.HookEventName,
+		"cwd":                 payload.Cwd,
+		"focused_terminal_id": focusedTerminalID,
+		"runtime":             ghostty.CollectRuntimeDiagnostics(),
+	})
 
 	// Determine notification type pointer
 	var notifType *string
@@ -140,8 +151,8 @@ func Process(r io.Reader, store *db.Store, sourceNamespace string, debugDir stri
 
 	// Capture Ghostty terminal ID on SessionStart
 	ghosttyTerminalID := ""
-	if payload.HookEventName == "SessionStart" {
-		ghosttyTerminalID = detectGhosttyTerminalID()
+	if shouldCaptureGhosttyBinding(payload.HookEventName) {
+		ghosttyTerminalID = focusedTerminalID
 	}
 
 	// Upsert session
@@ -240,18 +251,11 @@ func truncStr(s string, max int) string {
 	return s
 }
 
-// detectGhosttyTerminalID uses osascript to get the focused Ghostty terminal ID.
-func detectGhosttyTerminalID() string {
-	out, err := exec.Command("osascript", "-e", `
-tell application "Ghostty"
-	set w to front window
-	set t to selected tab of w
-	set term to focused terminal of t
-	return id of term
-end tell
-`).Output()
-	if err != nil {
-		return ""
+func shouldCaptureGhosttyBinding(eventName string) bool {
+	switch eventName {
+	case "SessionStart", "UserPromptSubmit":
+		return true
+	default:
+		return false
 	}
-	return strings.TrimSpace(string(out))
 }

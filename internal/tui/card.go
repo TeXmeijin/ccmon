@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/charmbracelet/lipgloss"
 	"github.com/TeXmeijin/ccmon/internal/model"
+	"github.com/charmbracelet/lipgloss"
 )
 
 const cardHeight = 4 // fixed inner height (lines)
@@ -156,7 +156,7 @@ func renderEmptyState(width, height int) string {
 		"%s\n\n%s\n%s",
 		headerStyle().Render("ccmon"),
 		textStyle().Render("No active sessions"),
-		mutedStyle().Render("Waiting for Claude Code hook events..."),
+		mutedStyle().Render("Waiting for hook events..."),
 	)
 
 	return lipgloss.Place(width, height, lipgloss.Center, lipgloss.Center, msg)

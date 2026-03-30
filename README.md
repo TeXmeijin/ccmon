@@ -1,23 +1,23 @@
 # ccmon
 
-Ambient TUI monitor for [Claude Code](https://docs.anthropic.com/en/docs/claude-code) sessions.
+Ambient TUI monitor for [Claude Code](https://docs.anthropic.com/en/docs/claude-code) and [Codex](https://developers.openai.com/codex/hooks) sessions.
 
-Watch all your Claude Code sessions at a glance — which ones are running, which need permission, and what each is working on — without reading logs or switching panes.
+Watch your coding-agent sessions at a glance — which ones are running, which need permission, and what each is working on — without reading logs or switching panes.
 
 <!-- TODO: Add demo GIF here -->
 <!-- ![ccmon demo](./assets/demo.gif) -->
 
 ## Features
 
-- **Card-based TUI** — Each Claude Code session gets a visual card with status, directory, and activity
-- **Real-time updates** — Cards update as Claude works via command hooks
+- **Card-based TUI** — Each Claude Code or Codex session gets a visual card with status, directory, and activity
+- **Real-time updates** — Cards update via provider command hooks
 - **Status at a glance** — Color-coded badges: `RUN`, `WAIT`, `PERM`, `DONE`, `FAIL`, `IDLE`, `END`
 - **Session title** — First user prompt shown alongside directory name for quick identification
 - **Headline with source** — See who said what: `>` user, `<` assistant, `!` notification, `~` summary
 - **Activity dots** — Recent event history as colored dots
 - **Responsive layout** — Auto-switches between 1/2/3 column grid based on terminal width
-- **Multi-config support** — Run separate instances for personal/work Claude configs via `CLAUDE_CONFIG_DIR`
-- **Safe hook install** — Non-destructive merge into `settings.json`, preserving all existing hooks
+- **Multi-config support** — Run separate instances for personal/work configs via `CLAUDE_CONFIG_DIR`, `CODEX_HOME`, or explicit flags
+- **Safe hook install** — Non-destructive merge into the provider's hook config, preserving existing hooks
 
 ## Install
 
@@ -30,41 +30,66 @@ Requires Go 1.21+ and CGO enabled (for SQLite).
 ## Quick Start
 
 ```bash
-# 1. Install hooks into your Claude Code config
+# 1. Install hooks into your provider config
 ccmon install
 
 # 2. Launch the monitor
 ccmon tui
 ```
 
-That's it. Open Claude Code sessions in other terminals and watch them appear.
+That's it. Open Claude Code or Codex sessions in other terminals and watch them appear.
+
+### Explicit provider selection
+
+Claude remains the default when auto-detection is ambiguous. Use `--provider codex` to target Codex explicitly.
+
+```bash
+# Claude Code
+ccmon install --provider claude
+ccmon tui --provider claude
+
+# Codex
+ccmon install --provider codex
+ccmon tui --provider codex
+```
 
 ### With custom config directory
 
-If you use `CLAUDE_CONFIG_DIR` to separate personal/work configs:
+If you use custom config directories:
 
 ```bash
-# Personal
+# Claude personal
 ccmon install --config-dir ~/.claude-personal --source personal
 ccmon tui --config-dir ~/.claude-personal --source personal
 
-# Work
+# Claude work
 ccmon install --config-dir ~/.claude-work --source work
 ccmon tui --config-dir ~/.claude-work --source work
+
+# Codex personal
+ccmon install --provider codex --config-dir ~/.codex-personal --source personal
+ccmon tui --provider codex --config-dir ~/.codex-personal --source personal
 ```
 
 ## How It Works
 
 ```
-Claude Code ──hook──> ccmon hook ──> SQLite
-                                       │
-                          ccmon tui <───┘
+Claude Code / Codex ──hook──> ccmon hook ──> SQLite
+                                                │
+                                   ccmon tui <───┘
 ```
 
-1. `ccmon install` adds [command hooks](https://docs.anthropic.com/en/docs/claude-code/hooks) to your Claude Code `settings.json`
-2. When Claude Code fires events (tool use, notifications, stop, etc.), the hooks pipe JSON to `ccmon hook` via stdin
+1. `ccmon install` adds provider-specific command hooks
+2. When the provider fires events (tool use, notifications, stop, etc.), the hooks pipe JSON to `ccmon hook` via stdin
 3. `ccmon hook` parses the payload and writes a lightweight summary to a local SQLite database
 4. `ccmon tui` reads the database and renders the card grid, refreshing every 300ms
+
+### Provider notes
+
+- Claude Code installs into `settings.json`.
+- Codex installs into `hooks.json` and enables `codex_hooks = true` in `config.toml` if needed.
+- Current Codex hook support tracks `SessionStart`, `UserPromptSubmit`, `PreToolUse`, `PostToolUse`, and `Stop`.
+- Current Codex hook docs only expose `Bash` for `PreToolUse` / `PostToolUse`, so fine-grained `Read` / `Edit` / `Write` activity remains Claude-only for now.
 
 ### What gets stored
 
@@ -84,15 +109,16 @@ Claude Code ──hook──> ccmon hook ──> SQLite
 | Command | Description |
 |---|---|
 | `ccmon tui` | Launch the TUI monitor |
-| `ccmon install` | Install hooks into Claude Code settings.json |
+| `ccmon install` | Install hooks into the selected provider config |
 | `ccmon uninstall` | Remove only ccmon hooks (preserves other hooks) |
-| `ccmon hook` | Process a hook event from stdin (called by Claude Code) |
+| `ccmon hook` | Process a provider hook event from stdin |
 
 ### Global Flags
 
 | Flag | Description | Default |
 |---|---|---|
-| `--config-dir` | Claude config directory | `$CLAUDE_CONFIG_DIR` or `~/.claude` |
+| `--provider` | Session provider | auto |
+| `--config-dir` | Provider config directory | Claude: `$CLAUDE_CONFIG_DIR` or `~/.claude`; Codex: `$CODEX_HOME` or `~/.codex` |
 | `--source` | Source namespace label | basename of config dir |
 | `--db` | SQLite database path | `<config-dir>/ccmon/ccmon.db` |
 
@@ -137,11 +163,13 @@ ccmon tui --config-dir /tmp/ccmon-demo --source demo
 ## Uninstall
 
 ```bash
-# Remove hooks from settings.json
-ccmon uninstall
+# Remove hooks from the provider config
+ccmon uninstall --provider claude
+ccmon uninstall --provider codex
 
 # Optionally delete the database
 rm -rf ~/.claude/ccmon/
+rm -rf ~/.codex/ccmon/
 ```
 
 ## License

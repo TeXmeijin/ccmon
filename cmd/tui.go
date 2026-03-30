@@ -15,7 +15,10 @@ var tuiCmd = &cobra.Command{
 	Use:   "tui",
 	Short: "Launch the TUI session monitor",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		cfg := config.Resolve(flagConfigDir, flagSource, flagDB)
+		cfg, err := config.Resolve(flagConfigDir, flagSource, flagDB, flagProvider)
+		if err != nil {
+			return err
+		}
 
 		store, err := db.Open(cfg.DBPath)
 		if err != nil {
@@ -23,7 +26,7 @@ var tuiCmd = &cobra.Command{
 		}
 		defer store.Close()
 
-		m := tui.NewModel(store, cfg.Source)
+		m := tui.NewModel(store, cfg.Source, cfg.ConfigDir)
 		p := tea.NewProgram(m, tea.WithAltScreen(), tea.WithMouseCellMotion())
 		if _, err := p.Run(); err != nil {
 			return fmt.Errorf("TUI error: %w", err)

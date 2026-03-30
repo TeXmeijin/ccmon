@@ -1,8 +1,8 @@
 package tui
 
 import (
-	"github.com/charmbracelet/lipgloss"
 	"github.com/TeXmeijin/ccmon/internal/model"
+	"github.com/charmbracelet/lipgloss"
 )
 
 // Color palette
@@ -17,13 +17,13 @@ var (
 	colorBright    = lipgloss.Color("#c0caf5")
 
 	// Status colors
-	colorRunning    = lipgloss.Color("#7dcfff")
-	colorWaitInput  = lipgloss.Color("#bb9af7")
-	colorWaitPerm   = lipgloss.Color("#ff9e64")
-	colorCompleted  = lipgloss.Color("#9ece6a")
-	colorFailed     = lipgloss.Color("#f7768e")
-	colorStale      = lipgloss.Color("#565f89")
-	colorEnded      = lipgloss.Color("#414868")
+	colorRunning   = lipgloss.Color("#7dcfff")
+	colorWaitInput = lipgloss.Color("#bb9af7")
+	colorWaitPerm  = lipgloss.Color("#ff9e64")
+	colorCompleted = lipgloss.Color("#9ece6a")
+	colorFailed    = lipgloss.Color("#f7768e")
+	colorStale     = lipgloss.Color("#565f89")
+	colorEnded     = lipgloss.Color("#414868")
 
 	// Dot colors
 	colorDotTool    = lipgloss.Color("#7aa2f7")
@@ -112,7 +112,7 @@ func cardStyle(selected bool, status model.Status, width int) lipgloss.Style {
 	}
 
 	return lipgloss.NewStyle().
-		Width(width - 2).
+		Width(width-2).
 		Background(bg).
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(border).
